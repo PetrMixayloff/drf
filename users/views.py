@@ -20,11 +20,15 @@ class CreateUserAPIView(APIView):
     def post(self, request):
         user = request.data
         login = user["login"]
+        password = user["password"]
         user["type_of_login"] = self.check_login_type(login)
         serializer = UserSerializer(data=user)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        user = User.objects.get(login=login, password=password)
+        payload = jwt_payload_handler(user)
+        token = jwt.encode(payload, settings.SECRET_KEY)
+        return Response(token, status=status.HTTP_201_CREATED)
 
     def check_login_type(self, login):
         if re.match(r"^\+?1?\d{9,15}$", login):
