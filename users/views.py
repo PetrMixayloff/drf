@@ -1,9 +1,13 @@
 import re
+
+import chardet
 import jwt
+import subprocess
 from django.contrib.auth import user_logged_in
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.generics import RetrieveUpdateAPIView
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_jwt.serializers import jwt_payload_handler
@@ -35,6 +39,35 @@ class CreateUserAPIView(APIView):
             return 'phone'
         else:
             return 'email'
+
+
+class UserRetrieveUpdateAPIView(RetrieveUpdateAPIView):
+    # Allow only authenticated users to access this url
+    permission_classes = (IsAuthenticated,)
+    serializer_class = UserSerializer
+
+    def get(self, request, *args, **kwargs):
+        # serializer to handle turning our `User` object into something that
+        # can be JSONified and sent to the client.
+        serializer = self.serializer_class(request.user)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, ])
+def get_latency(request):
+    p = subprocess.Popen(["ping", "www.google.com"], stdout=subprocess.PIPE)
+    latency = ''
+    for line in p.stdout:
+        char = chardet.detect(line)
+        charenc = char['encoding']
+        line = line.decode(charenc).encode('utf-8')
+        if 'мсек' in line.decode('utf-8'):
+            latency = line.decode('utf-8')
+    latency = 'Время задержки до www.google.com: ' + latency
+    response = {'latency': latency}
+    return Response(response, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
