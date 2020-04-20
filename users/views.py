@@ -11,8 +11,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_jwt.serializers import jwt_payload_handler
-
-from users.models import User
+from django.conf import settings
+from users.models import User, Token
 from drf import settings
 from .serializers import UserSerializer
 
@@ -32,6 +32,8 @@ class CreateUserAPIView(APIView):
         user = User.objects.get(login=login, password=password)
         payload = jwt_payload_handler(user)
         token = jwt.encode(payload, settings.SECRET_KEY)
+        token_model = Token(token=token, user=user)
+        token_model.save()
         return Response(token, status=status.HTTP_201_CREATED)
 
     def check_login_type(self, login):
@@ -50,7 +52,8 @@ class UserRetrieveUpdateAPIView(RetrieveUpdateAPIView):
         # serializer to handle turning our `User` object into something that
         # can be JSONified and sent to the client.
         serializer = self.serializer_class(request.user)
-
+        token_model = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')[0]
+        token_model.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -67,7 +70,22 @@ def get_latency(request):
             latency = line.decode('utf-8')
     latency = 'Время задержки до www.google.com: ' + latency
     response = {'latency': latency}
+    token_model = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')[0]
+    token_model.save()
     return Response(response, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, ])
+def logout(request):
+    all = request.GET.get('all', '')
+    token_models = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')
+    if all:
+        for item in token_models:
+            item.delete()
+    else:
+        token_models[0].delete()
+    return Response(status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -82,6 +100,11 @@ def authenticate_user(request):
             try:
                 payload = jwt_payload_handler(user)
                 token = jwt.encode(payload, settings.SECRET_KEY)
+                last_token_model = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')[0]
+                last_token_model.is_active = False
+                last_token_model.save()
+                new_token_model = Token(token=token, user=user)
+                new_token_model.save()
                 user_details = {'name': user.name,
                                 'token': token}
                 user_logged_in.send(sender=user.__class__,

@@ -16,7 +16,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-from users.views import CreateUserAPIView, authenticate_user, UserRetrieveUpdateAPIView, get_latency
+from users.views import CreateUserAPIView, authenticate_user, UserRetrieveUpdateAPIView, get_latency, logout
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -24,4 +24,5 @@ urlpatterns = [
     path('signin/', authenticate_user, name='signin'),
     path('info/', UserRetrieveUpdateAPIView.as_view()),
     path('latency/', get_latency, name='latency'),
+    path('logout/', logout, name='logout'),
 ]
