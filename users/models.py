@@ -69,7 +69,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 class Token(models.Model):
     token = models.CharField(max_length=500)
     user = models.ForeignKey(User, related_name="token_user", on_delete=models.CASCADE)
-    is_active = models.BooleanField(default=True)
     timestamp = models.DateTimeField(auto_now=True)
 
     class Meta:

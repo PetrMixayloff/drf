@@ -1,5 +1,4 @@
 import re
-
 import chardet
 import jwt
 import subprocess
@@ -15,6 +14,7 @@ from django.conf import settings
 from users.models import User, Token
 from drf import settings
 from .serializers import UserSerializer
+from django.core.exceptions import ObjectDoesNotExist
 
 
 class CreateUserAPIView(APIView):
@@ -43,23 +43,30 @@ class CreateUserAPIView(APIView):
             return 'email'
 
 
-class UserRetrieveUpdateAPIView(RetrieveUpdateAPIView):
-    # Allow only authenticated users to access this url
-    permission_classes = (IsAuthenticated,)
-    serializer_class = UserSerializer
-
-    def get(self, request, *args, **kwargs):
-        # serializer to handle turning our `User` object into something that
-        # can be JSONified and sent to the client.
-        serializer = self.serializer_class(request.user)
-        token_model = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')[0]
-        token_model.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, ])
+def get_info(request):
+    # serializer to handle turning our `User` object into something that
+    # can be JSONified and sent to the client.
+    token = request.auth
+    print(token)
+    try:
+        token_model = Token.objects.get(token=token)
+    except ObjectDoesNotExist:
+        return Response(status=status.HTTP_401_UNAUTHORIZED)
+    serializer = UserSerializer(request.user)
+    token_model.save()
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, ])
 def get_latency(request):
+    token = request.auth.decode('utf-8')
+    try:
+        token_model = Token.objects.get(token=token)
+    except ObjectDoesNotExist:
+        return Response(status=status.HTTP_401_UNAUTHORIZED)
     p = subprocess.Popen(["ping", "www.google.com"], stdout=subprocess.PIPE)
     latency = ''
     for line in p.stdout:
@@ -70,7 +77,6 @@ def get_latency(request):
             latency = line.decode('utf-8')
     latency = 'Время задержки до www.google.com: ' + latency
     response = {'latency': latency}
-    token_model = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')[0]
     token_model.save()
     return Response(response, status=status.HTTP_200_OK)
 
@@ -100,11 +106,8 @@ def authenticate_user(request):
             try:
                 payload = jwt_payload_handler(user)
                 token = jwt.encode(payload, settings.SECRET_KEY)
-                last_token_model = Token.objects.filter(user_id=request.user.id).order_by('-timestamp')[0]
-                last_token_model.is_active = False
-                last_token_model.save()
-                new_token_model = Token(token=token, user=user)
-                new_token_model.save()
+                token_model = Token(token=token, user=user)
+                token_model.save()
                 user_details = {'name': user.name,
                                 'token': token}
                 user_logged_in.send(sender=user.__class__,
